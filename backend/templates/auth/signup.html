@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Простая форма</title>
+</head>
+<body>
+    <h1>Введите ваше имя</h1>
+    <form action="/submit/" method="post">
+        {% csrf_token %}
+        <label for="phone_number">Номер телефона:</label>
+        <input type="text" id="phone_number" name="phone_number">
+        <input type="submit" value="Отправить">
+    </form>
+</body>
+</html>

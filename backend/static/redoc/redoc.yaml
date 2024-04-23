@@ -1,0 +1,327 @@
+openapi: 3.0.2
+info:
+  title: 'Django_Referal_System API'
+  version: ''
+  description: |
+    корневой путь API `/api/v1/`
+
+    # Регистрация пользователей
+    1. Отправляет POST-запрос на добавление нового пользователя с параметром `phone_number` на эндпоинт `/api/v1/auth/signup/`.
+    2. Поолучает код подтверждения (`confirmation_code`) по SMS.
+    3. Отправляет POST-запрос с параметрами `phone_number` и `confirmation_code` на эндпоинт `/api/v1/auth/confirmation_signup/`. При успешном запросе в ответ приходит `token` (JWT-токен).
+    4. Пользователь может изменять свои данные по PATCH-запросу на эндпоинт `/api/v1/users/me/`. Доступные поля описаны в документации.
+    # Пользовательские роли
+    - **Аноним** — доступны эндпоинты регистрации и получения токена.
+    - **Аутентифицированный пользователь**  — доступны эндпоинты `users/me` и `users/activate_invite_code`, для редактирования профиля и активации инвайт-кода.
+
+servers:
+  - url: /api/v1/
+
+tags:
+  - name: AUTH
+    description: Регистрация и получение токена
+  - name: USERS
+    description: Просмотр и редактирование профиля, активация инвайт-кода
+
+paths:
+  api/v1/auth/signup/:
+    post:
+      tags:
+        - AUTH
+      operationId: Регистрация нового пользователя
+      description: |
+        Отправить запрос с параметром `phone_number` для получения кода подтверждения.
+        Поле `phone_number` уникальное.
+        Доступ: **Доступно без токена.**
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              required:
+                - phone_number
+              properties:
+                phone_number:
+                  type: string
+                  format: phone_number
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                properties:
+                  phone_number:
+                    type: string
+                    format: phone_number
+          description: 'Успешный запрос'
+
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или некорректные данные'
+
+  api/v1/auth/confirmation_signup/:
+    post:
+      tags:
+        - AUTH
+      operationId: Подтверждение регистрации и получение JWT-токена
+      description: |
+        Отправить запрос с параметрами `phone_number` и `confirmation code` для получения токена.
+        Доступ: **Доступно без токена.**
+      requestBody:
+        content:
+          application/json:
+            schema:
+              required:
+                - phone_number
+                - confirmation_code
+              properties:
+                phone_number:
+                  type: string
+                  format: phone_number
+                confirmation_code:
+                  type: string
+                  writeOnly: true
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+          description: 'Успешный запрос'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или некорректные данные'
+        404:
+          description: Пользователь не найден
+
+  api/v1/users/me/:
+    get:
+      tags:
+        - USERS
+      operationId: Получение данных своего профиля
+      description: |
+        Отправить запрос для получения данных своей учетной записи
+        Доступ: **Авторизованный пользователь**
+      responses:
+        200:
+          description: Успешный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        401:
+          description: Не указан JWT-токен
+        403:
+          description: Нет прав
+      security:
+        - jwt-token:
+        - read: admin, user
+    patch:
+      tags:
+        - USERS
+      operationId: Изменение данных своей учетной записи
+      description: |
+        Изменить данные своей учетной записи
+        Поля `phone_number`, `username` и `email` должны быть уникальными.
+        Доступа: **Авторизованный пользователь**
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MePatch'
+      responses:
+        200:
+          description: Успешный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        400:
+          description: 'Отсутствует обязательное поле или некорректные данные'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      security:
+        - jwt-token:
+          - write: admin, user
+
+  api/v1/users/activate_invite_code/:
+    post:
+      tags:
+        - USERS
+      operationId: Активация инвайт-кода
+      description: |
+        Активировать `invite_code`.
+        Доступа: **Авторизованный пользователь**.
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              required:
+                - invite_code
+              properties:
+                invite_code:
+                  type: string
+                  pattern: ^[a-zA-Z0-9]{6}$
+      responses:
+        200:
+          description: Успешный запрос
+          content:
+            application/json:
+              schema:
+                properties:
+                  invite_code:
+                    type: string
+                    pattern: ^[a-zA-Z0-9]{6}$
+
+        400:
+          description: 'Отсутствует обязательное поле или некорректные данные'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      security:  
+        - jwt-token:
+          - write: admin, user
+
+
+components:
+  schemas:
+
+    Me:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          format: phone_number
+        username:
+          type: string
+          nullable: true
+          pattern: ^[\w.@+-]+\z
+          maxLength: 254
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        last_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        invite_code:
+          type: string
+          readOnly: true
+        invited_by_code:
+          type: string
+          readOnly: true
+        invitings:
+          type: array
+          items:
+            type: string
+      required:
+      - phone_number
+
+
+    MePatch:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          format: phone_number
+        username:
+          type: string
+          nullable: true
+          pattern: ^[\w.@+-]+\z
+          maxLength: 254
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        last_name:
+          type: string
+          nullable: true
+          maxLength: 150
+      required:
+      - phone_number
+
+
+    User:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          format: phone_number
+        username:
+          type: string
+          nullable: true
+          pattern: ^[\w.@+-]+\z
+          maxLength: 254
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        last_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        invite_code:
+          type: string
+          readOnly: true
+        invited_by_code:
+          type: string
+          readOnly: true
+        invitings:
+          type: array
+          items:
+            type: string
+      required:
+      - phone_number
+
+
+    ValidationError:
+      title: Ошибка валидации
+      type: object
+      properties:
+        field_name:
+          type: array
+          items:
+            type: string
+
+
+    Token:
+      title: Токен
+      type: object
+      properties:
+        access:
+          type: string
+          title: access токен
+        refresh:
+          type: string
+          titke: refresh токен
+
+
+  securitySchemes:
+    jwt-token:
+      type: apiKey
+      description: Аутентификация по JWT-токену
+      name: Bearer
+      in: header
